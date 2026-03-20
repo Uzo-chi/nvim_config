@@ -4,26 +4,27 @@ return {
     dependencies = {
         "williamboman/mason.nvim",
         "williamboman/mason-lspconfig.nvim",
+        "mfussenegger/nvim-jdtls",
     },
     config = function()
         require("mason").setup()
 
         local servers = {
-            "clangd", "rust_analyzer", "jdtls", "pyright", "ts_ls", "bashls", "lua_ls",
+            "clangd", "rust_analyzer", "pyright", "ts_ls", "bashls", "lua_ls",
         }
 
         require("mason-lspconfig").setup({
-            ensure_installed = servers,
+            ensure_installed = {
+                "clangd", "rust_analyzer", "jdtls", "pyright", "ts_ls", "bashls", "lua_ls"
+            },
         })
 
         local capabilities = require("blink.cmp").get_lsp_capabilities()
 
-        -- 1. Apply capabilities to all servers natively
         vim.lsp.config("*", {
             capabilities = capabilities,
         })
 
-        -- 2. Bash specific setup (Native API)
         vim.lsp.config("bashls", {
             filetypes = { "sh", "bash", "inc", "command", "zsh" },
             settings = {
@@ -31,10 +32,8 @@ return {
             },
         })
 
-        -- 3. Lua specific setup (Native API, safely handling missing workspaces)
         vim.lsp.config("lua_ls", {
             on_init = function(client)
-                -- If a workspace folder exists, check for a project-specific config
                 if client.workspace_folders then
                     local path = client.workspace_folders[1].name
                     if path ~= vim.fn.stdpath("config") and (vim.uv.fs_stat(path .. "/.luarc.json") or vim.uv.fs_stat(path .. "/.luarc.jsonc")) then
@@ -42,7 +41,6 @@ return {
                     end
                 end
 
-                -- Inject the Neovim API globals
                 client.config.settings.Lua = vim.tbl_deep_extend("force", client.config.settings.Lua, {
                     runtime = {
                         version = "LuaJIT",
@@ -57,13 +55,65 @@ return {
             settings = { Lua = {} },
         })
 
-        -- 4. Turn them all on natively
         for _, server in ipairs(servers) do
             vim.lsp.enable(server)
         end
 
-        -- 5. The Timing Fix: Retroactively attach to files like init.lua
-        -- (This will no longer crash because we removed the bad root_dir override)
+        -- ====================================================================
+        -- JDTLS Setup (nvim-jdtls)
+        -- ====================================================================
+        vim.api.nvim_create_autocmd("FileType", {
+            pattern = "java",
+            desc = "Start nvim-jdtls for Java files",
+            callback = function()
+                local jdtls = require("jdtls")
+
+                local root_markers = { ".git", "mvnw", "gradlew", "build.gradle", "pom.xml" }
+                local root_dir = vim.fs.root(0, root_markers)
+
+                -- Safe fallback for lone Java files
+                if not root_dir then
+                    root_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p:h")
+                end
+
+                local project_name = vim.fn.fnamemodify(root_dir, ":p:h:t")
+                local workspace_dir = vim.fn.stdpath("data") .. "/jdtls-workspace/" .. project_name
+
+                local jdtls_bin = vim.fn.stdpath("data") .. "/mason/bin/jdtls"
+
+                local config = {
+                    cmd = {
+                        jdtls_bin,
+                        "-data", workspace_dir,
+                    },
+                    root_dir = root_dir,
+                    capabilities = capabilities,
+                    settings = {
+                        java = {
+                            -- THIS forces your project to compile/lint with Java 17
+                            configuration = {
+                                runtimes = {
+                                    {
+                                        name = "JavaSE-17",
+                                        path = "/usr/lib/jvm/java-17-openjdk-amd64",
+                                        default = true,
+                                    },
+                                }
+                            },
+                            eclipse = { downloadSources = true },
+                            maven = { downloadSources = true },
+                            implementationsCodeLens = { enabled = true },
+                            referencesCodeLens = { enabled = true },
+                            references = { includeDecompiledSources = true },
+                            signatureHelp = { enabled = true },
+                        }
+                    },
+                }
+
+                jdtls.start_or_attach(config)
+            end,
+        })
+
         vim.schedule(function()
             for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
                 if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].filetype ~= "" and vim.bo[bufnr].buftype == "" then
@@ -72,7 +122,6 @@ return {
             end
         end)
 
-        -- 6. Keybindings
         vim.api.nvim_create_autocmd("LspAttach", {
             desc = "LSP Keybindings",
             callback = function(event)
