@@ -8,7 +8,7 @@ return {
         version = "2.*",
     },
     opts = {
-        keymap = { 
+        keymap = {
             preset = "super-tab" -- Use Tab to accept completions, just like Kickstart
         },
         appearance = {
@@ -19,6 +19,23 @@ return {
         },
         sources = {
             default = { "lsp", "path", "snippets", "buffer" },
+
+            -- THE FIX: Deduplicator intercept added here
+            providers = {
+                lsp = {
+                    transform_items = function(_, items)
+                        local seen = {}
+                        -- Uses modern Neovim 0.10+ iterators to filter the list
+                        return vim.iter(items):filter(function(item)
+                            if seen[item.label] then
+                                return false -- Drop the duplicate
+                            end
+                            seen[item.label] = true
+                            return true -- Keep the first instance
+                        end):totable()
+                    end,
+                },
+            },
         },
         snippets = { preset = "luasnip" },
         fuzzy = { implementation = "prefer_rust_with_warning" },
