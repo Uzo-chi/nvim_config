@@ -10,13 +10,17 @@ return {
         require("mason").setup()
 
         local servers = {
-            "clangd", "rust_analyzer", "pyright", "ts_ls", "bashls", "lua_ls",
+            "clangd", "rust_analyzer", "pyright", "ts_ls", "bashls", "lua_ls", "marksman",
         }
 
         require("mason-lspconfig").setup({
             ensure_installed = {
-                "clangd", "rust_analyzer", "jdtls", "pyright", "ts_ls", "bashls", "lua_ls"
+                "clangd", "rust_analyzer", "jdtls", "pyright", "ts_ls", "bashls", "lua_ls", "marksman",
             },
+
+            ["jdtls"] = function()
+
+            end
         })
 
         local capabilities = require("blink.cmp").get_lsp_capabilities()
