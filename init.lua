@@ -24,6 +24,8 @@ if vim.g.vscode then
     -- ===========================================
     local vscode = require('vscode')
 
+    vim.notify("Neovim Config Successfully Loaded in VSCode!", vim.log.levels.INFO)
+
     -- Route your file explorer bind to VSCode's native sidebar
     vim.keymap.set('n', '<C-b>', function()
         vscode.action('workbench.view.explorer')
